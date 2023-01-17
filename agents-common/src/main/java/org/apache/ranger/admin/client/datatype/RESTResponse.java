@@ -29,7 +29,7 @@ import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.sun.jersey.api.client.ClientResponse;
+import javax.ws.rs.core.Response;
 
 
 @JsonAutoDetect(getterVisibility = Visibility.NONE, setterVisibility = Visibility.NONE, fieldVisibility = Visibility.ANY)
@@ -91,10 +91,10 @@ public class RESTResponse implements java.io.Serializable {
 		return StringUtil.isEmpty(msgDesc) ? ("HTTP " + httpStatusCode) : msgDesc;
 	}
 
-	public static RESTResponse fromClientResponse(ClientResponse response) {
+	public static RESTResponse fromClientResponse(Response response) {
 		RESTResponse ret = null;
 
-		String jsonString = response == null ? null : response.getEntity(String.class);
+		String jsonString = response == null ? null : response.readEntity(String.class);
 		int    httpStatus = response == null ? 0 : response.getStatus();
 
 		if(! StringUtil.isEmpty(jsonString)) {

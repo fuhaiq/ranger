@@ -44,9 +44,14 @@
     </parent>
     <dependencies>
         <dependency>
-            <groupId>com.sun.jersey</groupId>
-            <artifactId>jersey-bundle</artifactId>
-            <version>${jersey-bundle.version}</version>
+            <groupId>org.glassfish.jersey.core</groupId>
+            <artifactId>jersey-client</artifactId>
+            <version>2.36</version>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jersey.media</groupId>
+            <artifactId>jersey-media-json-jackson</artifactId>
+            <version>2.36</version>
         </dependency>
         <dependency>
             <groupId>commons-lang</groupId>

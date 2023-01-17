@@ -18,7 +18,6 @@
  */
 package org.apache.ranger;
 
-import com.sun.jersey.api.client.ClientResponse;
 import org.apache.ranger.plugin.model.RangerService;
 import org.apache.ranger.plugin.util.RangerRESTClient;
 import org.junit.Assert;
@@ -50,13 +49,13 @@ public class TestRangerClient {
     public void apiGet_Success() throws Exception {
         try {
             RangerRESTClient restClient = mock(RangerRESTClient.class);
-            ClientResponse   response   = mock(ClientResponse.class);
+            Response   response   = mock(Response.class);
             RangerClient     client     = new RangerClient(restClient);
             RangerService    service    = new RangerService("testType", "testService", "MockedService", "testTag", new HashMap<>());
 
             when(restClient.get(anyString(), any())).thenReturn(response);
             when(response.getStatus()).thenReturn(GET_TEST_API.getExpectedStatus().getStatusCode());
-            when(response.getEntity(RangerService.class)).thenReturn(service);
+            when(response.readEntity(RangerService.class)).thenReturn(service);
 
             RangerService ret = client.getService(service.getName());
 
@@ -71,11 +70,11 @@ public class TestRangerClient {
     public void apiGet_ServiceUnavailable() throws Exception {
         try {
             RangerRESTClient restClient = mock(RangerRESTClient.class);
-            ClientResponse   response   = mock(ClientResponse.class);
+            Response   response   = mock(Response.class);
             RangerClient     client     = new RangerClient(restClient);
 
             when(restClient.get(anyString(), any())).thenReturn(response);
-            when(response.getStatus()).thenReturn(ClientResponse.Status.SERVICE_UNAVAILABLE.getStatusCode());
+            when(response.getStatus()).thenReturn(Response.Status.SERVICE_UNAVAILABLE.getStatusCode());
 
             RangerService ret = client.getService(1L);
 
@@ -89,18 +88,18 @@ public class TestRangerClient {
     public void apiGet_FailWithUnexpectedStatusCode() throws Exception {
         try {
             RangerRESTClient restClient = mock(RangerRESTClient.class);
-            ClientResponse   response   = mock(ClientResponse.class);
+            Response   response   = mock(Response.class);
             RangerClient     client     = new RangerClient(restClient);
 
             when(restClient.get(anyString(), any())).thenReturn(response);
-            when(response.getStatus()).thenReturn(ClientResponse.Status.INTERNAL_SERVER_ERROR.getStatusCode());
+            when(response.getStatus()).thenReturn(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
 
             client.getService(1L);
 
             Assert.fail("supposed to fail with RangerServiceException");
         } catch(RangerServiceException excp) {
-            Assert.assertTrue(excp.getMessage().contains("statusCode=" + ClientResponse.Status.INTERNAL_SERVER_ERROR.getStatusCode()));
-            Assert.assertTrue(excp.getMessage().contains("status=" + ClientResponse.Status.INTERNAL_SERVER_ERROR.getReasonPhrase()));
+            Assert.assertTrue(excp.getMessage().contains("statusCode=" + Response.Status.INTERNAL_SERVER_ERROR.getStatusCode()));
+            Assert.assertTrue(excp.getMessage().contains("status=" + Response.Status.INTERNAL_SERVER_ERROR.getReasonPhrase()));
         }
     }
 

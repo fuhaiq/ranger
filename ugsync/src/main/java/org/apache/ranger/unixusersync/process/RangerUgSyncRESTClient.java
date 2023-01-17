@@ -30,12 +30,8 @@ import org.apache.hadoop.security.SecureClientLogin;
 import org.apache.ranger.plugin.util.RangerRESTClient;
 import org.apache.ranger.unixusersync.config.UserGroupSyncConfig;
 import org.codehaus.jackson.jaxrs.JacksonJsonProvider;
-
-import com.sun.jersey.api.client.Client;
-import com.sun.jersey.api.client.config.ClientConfig;
-import com.sun.jersey.api.client.config.DefaultClientConfig;
-import com.sun.jersey.api.client.filter.HTTPBasicAuthFilter;
-import com.sun.jersey.client.urlconnection.HTTPSProperties;
+import org.glassfish.jersey.client.JerseyClientBuilder;
+import org.glassfish.jersey.client.authentication.HttpAuthenticationFeature;
 
 public class RangerUgSyncRESTClient extends RangerRESTClient {
 	private String AUTH_KERBEROS = "kerberos";
@@ -56,20 +52,22 @@ public class RangerUgSyncRESTClient extends RangerRESTClient {
 			KeyManager[] kmList = getKeyManagers(ugKeyStoreFile, ugKeyStoreFilepwd);
 			TrustManager[] tmList = getTrustManagers(ugTrustStoreFile, ugTrustStoreFilepwd);
 			SSLContext sslContext = getSSLContext(kmList, tmList);
-			ClientConfig config = new DefaultClientConfig();
 
-			config.getClasses().add(JacksonJsonProvider.class); // to handle List<> unmarshalling
+			JerseyClientBuilder clientBuilder = new JerseyClientBuilder();
+			clientBuilder.register(JacksonJsonProvider.class); // to handle List<> unmarshalling
 			HostnameVerifier hv = new HostnameVerifier() {
 				public boolean verify(String urlHostName, SSLSession session) {
 					return session.getPeerHost().equals(urlHostName);
 				}
 			};
-			config.getProperties().put(HTTPSProperties.PROPERTY_HTTPS_PROPERTIES, new HTTPSProperties(hv, sslContext));
+			clientBuilder.hostnameVerifier(hv);
+			clientBuilder.sslContext(sslContext);
 
-			setClient(Client.create(config));
 			if (StringUtils.isNotEmpty(getUsername()) && StringUtils.isNotEmpty(getPassword())) {
-				getClient().addFilter(new HTTPBasicAuthFilter(getUsername(), getPassword()));
+				HttpAuthenticationFeature feature = HttpAuthenticationFeature.basic(getUsername(), getPassword());
+				clientBuilder.register(feature);
 			}
+			setClient(clientBuilder.build());
 		}
 
 		UserGroupSyncConfig config = UserGroupSyncConfig.getInstance();

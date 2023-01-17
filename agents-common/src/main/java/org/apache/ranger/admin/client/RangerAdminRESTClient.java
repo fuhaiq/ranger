@@ -20,8 +20,8 @@
  package org.apache.ranger.admin.client;
 
 
-import com.sun.jersey.api.client.ClientResponse;
-import com.sun.jersey.api.client.GenericType;
+import com.google.common.base.Strings;
+import javax.ws.rs.core.GenericType;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.AccessControlException;
@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.core.Cookie;
 import javax.ws.rs.core.NewCookie;
+import javax.ws.rs.core.Response;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -45,6 +46,7 @@ import java.security.PrivilegedAction;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 	private static final Logger LOG = LoggerFactory.getLogger(RangerAdminRESTClient.class);
@@ -114,6 +116,9 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		supportsTagDeltas               = config.getBoolean(propertyPrefix + RangerCommonConstants.PLUGIN_CONFIG_SUFFIX_TAG_DELTA, RangerCommonConstants.PLUGIN_CONFIG_SUFFIX_TAG_DELTA_DEFAULT);
 		isRangerCookieEnabled			= config.getBoolean(propertyPrefix + ".policy.rest.client.cookie.enabled", RangerCommonConstants.POLICY_REST_CLIENT_SESSION_COOKIE_ENABLED);
 		rangerAdminCookieName			= config.get(propertyPrefix + ".policy.rest.client.session.cookie.name", RangerCommonConstants.DEFAULT_COOKIE_NAME);
+		String username			        = config.get(propertyPrefix + ".policy.rest.secure.username");
+		String password			        = config.get(propertyPrefix + ".policy.rest.secure.password");
+		if(Strings.isNullOrEmpty(username) || Strings.isNullOrEmpty(password)) throw new IllegalArgumentException("username and password must be specified");
 
         if (!StringUtil.isEmpty(tmpUrl)) {
             url = tmpUrl.trim();
@@ -122,7 +127,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
             url = url.substring(0, url.length() - 1);
         }
 
-		init(url, sslConfigFileName, restClientConnTimeOutMs , restClientReadTimeOutMs, restClientMaxRetryAttempts, restClientRetryIntervalMs, config);
+		init(url, sslConfigFileName, restClientConnTimeOutMs , restClientReadTimeOutMs, restClientMaxRetryAttempts, restClientRetryIntervalMs, config, username, password);
 
         try {
             this.serviceNameUrlParam = URLEncoderUtil.encodeURIParam(serviceName);
@@ -182,7 +187,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 		RangerRole ret = null;
 
-		ClientResponse response = null;
+		Response response = null;
 		UserGroupInformation user = MiscUtil.getUGILoginUser();
 		boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
 		String relativeURL = RangerRESTUtils.REST_URL_SERVICE_CREATE_ROLE;
@@ -191,9 +196,9 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		queryParams.put(RangerRESTUtils.SERVICE_NAME_PARAM, serviceNameUrlParam);
 
 		if (isSecureMode) {
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
-					ClientResponse clientRes = null;
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
+					Response clientRes = null;
 					try {
 						clientRes = restClient.post(relativeURL, queryParams, request);
 					} catch (Exception e) {
@@ -222,7 +227,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		} else if(response == null) {
 			throw new Exception("unknown error during createRole. roleName="  + request.getName());
 		} else {
-			ret = response.getEntity(RangerRole.class);
+			ret = response.readEntity(RangerRole.class);
 		}
 
 		if(LOG.isDebugEnabled()) {
@@ -237,7 +242,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			LOG.debug("==> RangerAdminRESTClient.dropRole(" + roleName + ")");
 		}
 
-		ClientResponse response = null;
+		Response response = null;
 		UserGroupInformation user = MiscUtil.getUGILoginUser();
 		boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
 
@@ -248,9 +253,9 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		String relativeURL = RangerRESTUtils.REST_URL_SERVICE_DROP_ROLE + roleName;
 
 		if (isSecureMode) {
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
-					ClientResponse clientRes = null;
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
+					Response clientRes = null;
 					try {
 						clientRes = restClient.delete(relativeURL, queryParams);
 					} catch (Exception e) {
@@ -292,15 +297,15 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 		List<String> ret = null;
 		String emptyString = "";
-		ClientResponse response = null;
+		Response response = null;
 		UserGroupInformation user = MiscUtil.getUGILoginUser();
 		boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
 		String relativeURL = RangerRESTUtils.REST_URL_SERVICE_GET_USER_ROLES + execUser;
 
 		if (isSecureMode) {
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
-					ClientResponse clientRes = null;
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
+					Response clientRes = null;
 					try {
 						clientRes = restClient.get(relativeURL, null);
 					} catch (Exception e) {
@@ -327,7 +332,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 				throw new Exception("HTTP " + response.getStatus() + " Error: " + resp.getMessage());
 			} else {
-				ret = response.getEntity(getGenericType(emptyString));
+				ret = response.readEntity(getGenericType(emptyString));
 			}
 		} else {
 			throw new Exception("unknown error during getUserRoles. execUser="  + execUser);
@@ -347,7 +352,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 		List<String> ret = null;
 		String emptyString = "";
-		ClientResponse response = null;
+		Response response = null;
 		UserGroupInformation user = MiscUtil.getUGILoginUser();
 		boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
 		String relativeURL = RangerRESTUtils.REST_URL_SERVICE_GET_ALL_ROLES;
@@ -357,9 +362,9 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		queryParams.put(RangerRESTUtils.REST_PARAM_EXEC_USER, execUser);
 
 		if (isSecureMode) {
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
-					ClientResponse clientRes = null;
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
+					Response clientRes = null;
 					try {
 						clientRes = restClient.get(relativeURL, queryParams);
 					} catch (Exception e) {
@@ -386,7 +391,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 				throw new Exception("HTTP " + response.getStatus() + " Error: " + resp.getMessage());
 			} else {
-				ret = response.getEntity(getGenericType(emptyString));
+				ret = response.readEntity(getGenericType(emptyString));
 			}
 		} else {
 			throw new Exception("unknown error during getAllRoles.");
@@ -405,7 +410,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		}
 
 		RangerRole ret = null;
-		ClientResponse response = null;
+		Response response = null;
 		UserGroupInformation user = MiscUtil.getUGILoginUser();
 		boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
 		String relativeURL = RangerRESTUtils.REST_URL_SERVICE_GET_ROLE_INFO + roleName;
@@ -415,9 +420,9 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		queryParams.put(RangerRESTUtils.REST_PARAM_EXEC_USER, execUser);
 
 		if (isSecureMode) {
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
-					ClientResponse clientResp = null;
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
+					Response clientResp = null;
 					try {
 						clientResp = restClient.get(relativeURL, queryParams);
 					} catch (Exception e) {
@@ -444,7 +449,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 				throw new Exception("HTTP " + response.getStatus() + " Error: " + resp.getMessage());
 			} else {
-				ret = response.getEntity(RangerRole.class);
+				ret = response.readEntity(RangerRole.class);
 			}
 		} else {
 			throw new Exception("unknown error during getPrincipalsForRole. roleName="  + roleName);
@@ -463,15 +468,15 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			LOG.debug("==> RangerAdminRESTClient.grantRole(" + request + ")");
 		}
 
-		ClientResponse response = null;
+		Response response = null;
 		UserGroupInformation user = MiscUtil.getUGILoginUser();
 		boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
 		String relativeURL = RangerRESTUtils.REST_URL_SERVICE_GRANT_ROLE + serviceNameUrlParam;
 
 		if (isSecureMode) {
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
-					ClientResponse clientResp = null;
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
+					Response clientResp = null;
 					try {
 						clientResp = restClient.put(relativeURL, null, request);
 					} catch (Exception e) {
@@ -511,15 +516,15 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			LOG.debug("==> RangerAdminRESTClient.revokeRole(" + request + ")");
 		}
 
-		ClientResponse response = null;
+		Response response = null;
 		UserGroupInformation user = MiscUtil.getUGILoginUser();
 		boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
 		String relativeURL = RangerRESTUtils.REST_URL_SERVICE_REVOKE_ROLE + serviceNameUrlParam;
 
 		if (isSecureMode) {
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
-					ClientResponse clientResp = null;
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
+					Response clientResp = null;
 					try {
 						clientResp = restClient.put(relativeURL, null, request);
 					} catch (Exception e) {
@@ -559,7 +564,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			LOG.debug("==> RangerAdminRESTClient.grantAccess(" + request + ")");
 		}
 
-		ClientResponse response = null;
+		Response response = null;
 		UserGroupInformation user = MiscUtil.getUGILoginUser();
 		boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
 
@@ -567,10 +572,10 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		queryParams.put(RangerRESTUtils.REST_PARAM_PLUGIN_ID, pluginId);
 
 		if (isSecureMode) {
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
 					String relativeURL = RangerRESTUtils.REST_URL_SECURE_SERVICE_GRANT_ACCESS + serviceNameUrlParam;
-					ClientResponse clientResp = null;
+					Response clientResp = null;
 					try {
 						clientResp = restClient.post(relativeURL, queryParams, request);
 					} catch (Exception e) {
@@ -611,7 +616,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			LOG.debug("==> RangerAdminRESTClient.revokeAccess(" + request + ")");
 		}
 
-		ClientResponse response = null;
+		Response response = null;
 		UserGroupInformation user = MiscUtil.getUGILoginUser();
 		boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
 
@@ -619,10 +624,10 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		queryParams.put(RangerRESTUtils.REST_PARAM_PLUGIN_ID, pluginId);
 
 		if (isSecureMode) {
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
 					String relativeURL = RangerRESTUtils.REST_URL_SECURE_SERVICE_REVOKE_ACCESS + serviceNameUrlParam;
-					ClientResponse clientResp = null;
+					Response clientResp = null;
 					try {
 						clientResp = restClient.post(relativeURL, queryParams, request);
 					} catch (Exception e) {
@@ -658,7 +663,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		}
 	}
 
-	private void init(String url, String sslConfigFileName, int restClientConnTimeOutMs , int restClientReadTimeOutMs, int restClientMaxRetryAttempts, int restClientRetryIntervalMs, Configuration config) {
+	private void init(String url, String sslConfigFileName, int restClientConnTimeOutMs , int restClientReadTimeOutMs, int restClientMaxRetryAttempts, int restClientRetryIntervalMs, Configuration config, String username, String password) {
 		if(LOG.isDebugEnabled()) {
 			LOG.debug("==> RangerAdminRESTClient.init(" + url + ", " + sslConfigFileName + ")");
 		}
@@ -668,6 +673,8 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		restClient.setRestClientReadTimeOutMs(restClientReadTimeOutMs);
 		restClient.setMaxRetryAttempts(restClientMaxRetryAttempts);
 		restClient.setRetryIntervalMs(restClientRetryIntervalMs);
+
+		restClient.setBasicAuthInfo(username, password);
 
 		if(LOG.isDebugEnabled()) {
 			LOG.debug("<== RangerAdminRESTClient.init(" + url + ", " + sslConfigFileName + ")");
@@ -711,11 +718,11 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		queryParams.put(RangerRESTUtils.PATTERN_PARAM, pattern);
 		String relativeURL = RangerRESTUtils.REST_URL_LOOKUP_TAG_NAMES;
 
-		ClientResponse response = null;
+		Response response = null;
 		if (isSecureMode) {
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
-					ClientResponse clientResp = null;
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
+					Response clientResp = null;
 					try {
 						clientResp = restClient.get(relativeURL, queryParams);
 					} catch (Exception e) {
@@ -733,7 +740,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		}
 
 		if(response != null && response.getStatus() == HttpServletResponse.SC_OK) {
-			ret = response.getEntity(getGenericType(emptyString));
+			ret = response.readEntity(getGenericType(emptyString));
 		} else {
 			RESTResponse resp = RESTResponse.fromClientResponse(response);
 			LOG.error("Error getting tags. response=" + resp + ", serviceName=" + serviceName + ", " + "pattern=" + pattern);
@@ -756,7 +763,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		final RangerUserStore ret;
 		final UserGroupInformation user = MiscUtil.getUGILoginUser();
 		final boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
-		final ClientResponse response;
+		final Response response;
 
 		Map<String, String> queryParams = new HashMap<String, String>();
 		queryParams.put(RangerRESTUtils.REST_PARAM_LAST_KNOWN_USERSTORE_VERSION, Long.toString(lastKnownUserStoreVersion));
@@ -769,9 +776,9 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("Checking UserStore updated as user : " + user);
 			}
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
-					ClientResponse clientRes = null;
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
+					Response clientRes = null;
 					String relativeURL = RangerRESTUtils.REST_URL_SERVICE_SERCURE_GET_USERSTORE + serviceNameUrlParam;
 					try {
 						clientRes =  restClient.get(relativeURL, queryParams);
@@ -804,14 +811,14 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			}
 			ret = null;
 		} else if (response.getStatus() == HttpServletResponse.SC_OK) {
-			ret = response.getEntity(RangerUserStore.class);
+			ret = response.readEntity(RangerUserStore.class);
 		} else if (response.getStatus() == HttpServletResponse.SC_NOT_FOUND) {
 			ret = null;
 			LOG.error("Error getting UserStore; service not found. secureMode=" + isSecureMode + ", user=" + user
 					+ ", response=" + response.getStatus() + ", serviceName=" + serviceName
 					+ ", " + "lastKnownUserStoreVersion=" + lastKnownUserStoreVersion
 					+ ", " + "lastActivationTimeInMillis=" + lastActivationTimeInMillis);
-			String exceptionMsg = response.hasEntity() ? response.getEntity(String.class) : null;
+			String exceptionMsg = response.hasEntity() ? response.readEntity(String.class) : null;
 
 			RangerServiceNotFoundException.throwExceptionIfServiceNotFound(serviceName, exceptionMsg);
 
@@ -839,7 +846,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 		final UserGroupInformation user         = MiscUtil.getUGILoginUser();
 		final boolean              isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
-		final ClientResponse       response     = getRangerAdminPolicyDownloadResponse(lastKnownVersion, lastActivationTimeInMillis, user, isSecureMode);
+		final Response       response     = getRangerAdminPolicyDownloadResponse(lastKnownVersion, lastActivationTimeInMillis, user, isSecureMode);
 
 		if (response == null || response.getStatus() == HttpServletResponse.SC_NOT_MODIFIED || response.getStatus() == HttpServletResponse.SC_NO_CONTENT) {
 			if (response == null) {
@@ -855,7 +862,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			ret = null;
 		} else if (response.getStatus() == HttpServletResponse.SC_OK) {
 			setCookieReceivedFromCredSession(response);
-			ret = response.getEntity(ServicePolicies.class);
+			ret = response.readEntity(ServicePolicies.class);
 		} else if (response.getStatus() == HttpServletResponse.SC_NOT_FOUND) {
 			policyDownloadSessionId = null;
 			ret       = null;
@@ -863,7 +870,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 					+ ", response=" + response.getStatus() + ", serviceName=" + serviceName
 					+ ", " + "lastKnownVersion=" + lastKnownVersion
 					+ ", " + "lastActivationTimeInMillis=" + lastActivationTimeInMillis);
-			String exceptionMsg = response.hasEntity() ? response.getEntity(String.class) : null;
+			String exceptionMsg = response.hasEntity() ? response.readEntity(String.class) : null;
 			RangerServiceNotFoundException.throwExceptionIfServiceNotFound(serviceName, exceptionMsg);
 			LOG.warn("Received 404 error code with body:[" + exceptionMsg + "], Ignoring");
 		} else {
@@ -889,7 +896,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 		final UserGroupInformation user         = MiscUtil.getUGILoginUser();
 		final boolean              isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
-		final ClientResponse       response     = getRangerAdminPolicyDownloadResponse(lastKnownVersion, lastActivationTimeInMillis, user, isSecureMode);
+		final Response       response     = getRangerAdminPolicyDownloadResponse(lastKnownVersion, lastActivationTimeInMillis, user, isSecureMode);
 
 		if (response == null || response.getStatus() == HttpServletResponse.SC_NOT_MODIFIED || response.getStatus() == HttpServletResponse.SC_NO_CONTENT) {
 			if (response == null) {
@@ -906,7 +913,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			ret = null;
 		} else if (response.getStatus() == HttpServletResponse.SC_OK) {
 			checkAndResetSessionCookie(response);
-			ret = response.getEntity(ServicePolicies.class);
+			ret = response.readEntity(ServicePolicies.class);
 		} else if (response.getStatus() == HttpServletResponse.SC_NOT_FOUND) {
 			policyDownloadSessionId = null;
 			isValidPolicyDownloadSessionCookie = false;
@@ -915,7 +922,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 					+ ", response=" + response.getStatus() + ", serviceName=" + serviceName
 					+ ", " + "lastKnownVersion=" + lastKnownVersion
 					+ ", " + "lastActivationTimeInMillis=" + lastActivationTimeInMillis);
-			String exceptionMsg = response.hasEntity() ? response.getEntity(String.class) : null;
+			String exceptionMsg = response.hasEntity() ? response.readEntity(String.class) : null;
 			RangerServiceNotFoundException.throwExceptionIfServiceNotFound(serviceName, exceptionMsg);
 			LOG.warn("Received 404 error code with body:[" + exceptionMsg + "], Ignoring");
 		} else {
@@ -933,12 +940,12 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		return ret;
 	}
 
-	private ClientResponse getRangerAdminPolicyDownloadResponse(final long lastKnownVersion, final long lastActivationTimeInMillis, final UserGroupInformation user, final boolean isSecureMode) throws Exception {
+	private Response getRangerAdminPolicyDownloadResponse(final long lastKnownVersion, final long lastActivationTimeInMillis, final UserGroupInformation user, final boolean isSecureMode) throws Exception {
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("==> RangerAdminRESTClient.getRangerAdminPolicyDownloadResponse(" + lastKnownVersion + ", " + lastActivationTimeInMillis + ")");
 		}
 
-		final ClientResponse ret;
+		final Response ret;
 
 		Map<String, String> queryParams = new HashMap<String, String>();
 		queryParams.put(RangerRESTUtils.REST_PARAM_LAST_KNOWN_POLICY_VERSION, Long.toString(lastKnownVersion));
@@ -952,10 +959,10 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("Checking Service policy if updated as user : " + user);
 			}
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
 					String relativeURL = RangerRESTUtils.REST_URL_POLICY_GET_FOR_SECURE_SERVICE_IF_UPDATED + serviceNameUrlParam;
-					ClientResponse clientResp = null;
+					Response clientResp = null;
 					try {
 						clientResp = restClient.get(relativeURL, queryParams, policyDownloadSessionId);
 					} catch (Exception e) {
@@ -980,8 +987,8 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		return ret;
 	}
 
-	private void checkAndResetSessionCookie(ClientResponse response) {
-		List<NewCookie> respCookieList = response.getCookies();
+	private void checkAndResetSessionCookie(Response response) {
+		List<NewCookie> respCookieList = response.getCookies().values().stream().collect(Collectors.toList());
 		for (NewCookie respCookie : respCookieList) {
 			if (respCookie.getName().equalsIgnoreCase(rangerAdminCookieName)) {
 				policyDownloadSessionId = respCookie;
@@ -991,10 +998,10 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		}
 	}
 
-	private void setCookieReceivedFromCredSession(ClientResponse clientResponse) {
+	private void setCookieReceivedFromCredSession(Response clientResponse) {
 		if (isRangerCookieEnabled) {
 			Cookie sessionCookie       = null;
-			List<NewCookie> cookieList = clientResponse.getCookies();
+			List<NewCookie> cookieList = clientResponse.getCookies().values().stream().collect(Collectors.toList());;
 			// save cookie received from credentials session login
 			for (NewCookie cookie : cookieList) {
 				if (cookie.getName().equalsIgnoreCase(rangerAdminCookieName)) {
@@ -1017,7 +1024,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 		final UserGroupInformation user = MiscUtil.getUGILoginUser();
 		final boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
-		final ClientResponse response = getRangerAdminTagDownloadResponse(lastKnownVersion, lastActivationTimeInMillis, user, isSecureMode);
+		final Response response = getRangerAdminTagDownloadResponse(lastKnownVersion, lastActivationTimeInMillis, user, isSecureMode);
 
 		if (response == null || response.getStatus() == HttpServletResponse.SC_NOT_MODIFIED) {
 			if (response == null) {
@@ -1036,7 +1043,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			ret = null;
 		} else if (response.getStatus() == HttpServletResponse.SC_OK) {
 			setCookieReceivedFromTagDownloadSession(response);
-			ret = response.getEntity(ServiceTags.class);
+			ret = response.readEntity(ServiceTags.class);
 		} else if (response.getStatus() == HttpServletResponse.SC_NOT_FOUND) {
 			tagDownloadSessionId = null;
 			ret = null;
@@ -1045,7 +1052,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 					+ ", " + "lastKnownVersion=" + lastKnownVersion
 					+ ", " + "lastActivationTimeInMillis=" + lastActivationTimeInMillis);
 
-			String exceptionMsg = response.hasEntity() ? response.getEntity(String.class) : null;
+			String exceptionMsg = response.hasEntity() ? response.readEntity(String.class) : null;
 			RangerServiceNotFoundException.throwExceptionIfServiceNotFound(serviceName, exceptionMsg);
 			LOG.warn("Received 404 error code with body:[" + exceptionMsg + "], Ignoring");
 		} else {
@@ -1071,7 +1078,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 		final UserGroupInformation user = MiscUtil.getUGILoginUser();
 		final boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
-		final ClientResponse response = getRangerAdminTagDownloadResponse(lastKnownVersion, lastActivationTimeInMillis, user, isSecureMode);
+		final Response response = getRangerAdminTagDownloadResponse(lastKnownVersion, lastActivationTimeInMillis, user, isSecureMode);
 
 		if (response == null || response.getStatus() == HttpServletResponse.SC_NOT_MODIFIED) {
 			if (response == null) {
@@ -1091,7 +1098,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			ret = null;
 		} else if (response.getStatus() == HttpServletResponse.SC_OK) {
 			checkAndResetTagDownloadSessionCookie(response);
-			ret = response.getEntity(ServiceTags.class);
+			ret = response.readEntity(ServiceTags.class);
 		} else if (response.getStatus() == HttpServletResponse.SC_NOT_FOUND) {
 			tagDownloadSessionId = null;
 			isValidTagDownloadSessionCookie = false;
@@ -1101,7 +1108,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 					+ ", " + "lastKnownVersion=" + lastKnownVersion
 					+ ", " + "lastActivationTimeInMillis=" + lastActivationTimeInMillis);
 
-			String exceptionMsg = response.hasEntity() ? response.getEntity(String.class) : null;
+			String exceptionMsg = response.hasEntity() ? response.readEntity(String.class) : null;
 			RangerServiceNotFoundException.throwExceptionIfServiceNotFound(serviceName, exceptionMsg);
 			LOG.warn("Received 404 error code with body:[" + exceptionMsg + "], Ignoring");
 		} else {
@@ -1119,12 +1126,12 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		return ret;
 	}
 
-	private ClientResponse getRangerAdminTagDownloadResponse(final long lastKnownVersion, final long lastActivationTimeInMillis, final UserGroupInformation user, final boolean isSecureMode) throws Exception {
+	private Response getRangerAdminTagDownloadResponse(final long lastKnownVersion, final long lastActivationTimeInMillis, final UserGroupInformation user, final boolean isSecureMode) throws Exception {
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("==> RangerAdminRESTClient.getRangerAdminTagDownloadResponse(" + lastKnownVersion + ", " + lastActivationTimeInMillis + ")");
 		}
 
-		final ClientResponse ret;
+		final Response ret;
 
 		Map<String, String> queryParams = new HashMap<String, String>();
 		queryParams.put(RangerRESTUtils.LAST_KNOWN_TAG_VERSION_PARAM, Long.toString(lastKnownVersion));
@@ -1134,10 +1141,10 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		queryParams.put(RangerRESTUtils.REST_PARAM_CAPABILITIES, pluginCapabilities);
 
 		if (isSecureMode) {
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
 					String relativeURL = RangerRESTUtils.REST_URL_GET_SECURE_SERVICE_TAGS_IF_UPDATED + serviceNameUrlParam;
-					ClientResponse clientResp = null;
+					Response clientResp = null;
 					try {
 						clientResp = restClient.get(relativeURL, queryParams, tagDownloadSessionId);
 					} catch (Exception e) {
@@ -1162,8 +1169,8 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		return ret;
 	}
 
-	private void checkAndResetTagDownloadSessionCookie(ClientResponse response) {
-		List<NewCookie> respCookieList = response.getCookies();
+	private void checkAndResetTagDownloadSessionCookie(Response response) {
+		List<NewCookie> respCookieList = response.getCookies().values().stream().collect(Collectors.toList());;
 		for (NewCookie respCookie : respCookieList) {
 			if (respCookie.getName().equalsIgnoreCase(rangerAdminCookieName)) {
 				tagDownloadSessionId = respCookie;
@@ -1173,10 +1180,10 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		}
 	}
 
-	private void setCookieReceivedFromTagDownloadSession(ClientResponse clientResponse) {
+	private void setCookieReceivedFromTagDownloadSession(Response clientResponse) {
 		if (isRangerCookieEnabled) {
 			Cookie sessionCookie       = null;
-			List<NewCookie> cookieList = clientResponse.getCookies();
+			List<NewCookie> cookieList = clientResponse.getCookies().values().stream().collect(Collectors.toList());;
 			// save cookie received from credentials session login
 			for (NewCookie cookie : cookieList) {
 				if (cookie.getName().equalsIgnoreCase(rangerAdminCookieName)) {
@@ -1199,7 +1206,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 		final UserGroupInformation user = MiscUtil.getUGILoginUser();
 		final boolean isSecureMode      = user != null && UserGroupInformation.isSecurityEnabled();
-		final ClientResponse response   = getRangerRolesDownloadResponse(lastKnownRoleVersion, lastActivationTimeInMillis, user, isSecureMode);
+		final Response response   = getRangerRolesDownloadResponse(lastKnownRoleVersion, lastActivationTimeInMillis, user, isSecureMode);
 
 		if (response == null || response.getStatus() == HttpServletResponse.SC_NOT_MODIFIED || response.getStatus() == HttpServletResponse.SC_NO_CONTENT) {
 			if (response == null) {
@@ -1218,7 +1225,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			ret = null;
 		} else if (response.getStatus() == HttpServletResponse.SC_OK) {
 			setCookieReceivedFromRoleDownloadSession(response);
-			ret = response.getEntity(RangerRoles.class);
+			ret = response.readEntity(RangerRoles.class);
 		} else if (response.getStatus() == HttpServletResponse.SC_NOT_FOUND) {
 			roleDownloadSessionId = null;
 			ret = null;
@@ -1226,7 +1233,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 					+ ", response=" + response.getStatus() + ", serviceName=" + serviceName
 					+ ", " + "lastKnownRoleVersion=" + lastKnownRoleVersion
 					+ ", " + "lastActivationTimeInMillis=" + lastActivationTimeInMillis);
-			String exceptionMsg = response.hasEntity() ? response.getEntity(String.class) : null;
+			String exceptionMsg = response.hasEntity() ? response.readEntity(String.class) : null;
 
 			RangerServiceNotFoundException.throwExceptionIfServiceNotFound(serviceName, exceptionMsg);
 
@@ -1254,7 +1261,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 
 		final UserGroupInformation user = MiscUtil.getUGILoginUser();
 		final boolean isSecureMode = user != null && UserGroupInformation.isSecurityEnabled();
-		final ClientResponse response = getRangerRolesDownloadResponse(lastKnownRoleVersion, lastActivationTimeInMillis, user, isSecureMode);
+		final Response response = getRangerRolesDownloadResponse(lastKnownRoleVersion, lastActivationTimeInMillis, user, isSecureMode);
 
 		if (response == null || response.getStatus() == HttpServletResponse.SC_NOT_MODIFIED || response.getStatus() == HttpServletResponse.SC_NO_CONTENT) {
 			if (response == null) {
@@ -1274,7 +1281,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			ret = null;
 		} else if (response.getStatus() == HttpServletResponse.SC_OK) {
 			checkAndResetRoleDownloadSessionCookie(response);
-			ret = response.getEntity(RangerRoles.class);
+			ret = response.readEntity(RangerRoles.class);
 		} else if (response.getStatus() == HttpServletResponse.SC_NOT_FOUND) {
 			roleDownloadSessionId = null;
 			isValidRoleDownloadSessionCookie = false;
@@ -1283,7 +1290,7 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 					+ ", response=" + response.getStatus() + ", serviceName=" + serviceName
 					+ ", " + "lastKnownRoleVersion=" + lastKnownRoleVersion
 					+ ", " + "lastActivationTimeInMillis=" + lastActivationTimeInMillis);
-			String exceptionMsg = response.hasEntity() ? response.getEntity(String.class) : null;
+			String exceptionMsg = response.hasEntity() ? response.readEntity(String.class) : null;
 			RangerServiceNotFoundException.throwExceptionIfServiceNotFound(serviceName, exceptionMsg);
 			LOG.warn("Received 404 error code with body:[" + exceptionMsg + "], Ignoring");
 		} else {
@@ -1301,12 +1308,12 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		return ret;
 	}
 
-	private ClientResponse getRangerRolesDownloadResponse(final long lastKnownRoleVersion, final long lastActivationTimeInMillis, final UserGroupInformation user, final boolean isSecureMode) throws Exception {
+	private Response getRangerRolesDownloadResponse(final long lastKnownRoleVersion, final long lastActivationTimeInMillis, final UserGroupInformation user, final boolean isSecureMode) throws Exception {
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("==> RangerAdminRESTClient.getRangerRolesDownloadResponse(" + lastKnownRoleVersion + ", " + lastActivationTimeInMillis + ")");
 		}
 
-		final ClientResponse ret;
+		final Response ret;
 
 		Map<String, String> queryParams = new HashMap<String, String>();
 		queryParams.put(RangerRESTUtils.REST_PARAM_LAST_KNOWN_ROLE_VERSION, Long.toString(lastKnownRoleVersion));
@@ -1319,9 +1326,9 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("Checking Roles updated as user : " + user);
 			}
-			PrivilegedAction<ClientResponse> action = new PrivilegedAction<ClientResponse>() {
-				public ClientResponse run() {
-					ClientResponse clientRes = null;
+			PrivilegedAction<Response> action = new PrivilegedAction<Response>() {
+				public Response run() {
+					Response clientRes = null;
 					String relativeURL = RangerRESTUtils.REST_URL_SERVICE_SERCURE_GET_USER_GROUP_ROLES + serviceNameUrlParam;
 					try {
 						clientRes =  restClient.get(relativeURL, queryParams, roleDownloadSessionId);
@@ -1347,8 +1354,8 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		return ret;
 	}
 
-	private void checkAndResetRoleDownloadSessionCookie(ClientResponse response) {
-		List<NewCookie> respCookieList = response.getCookies();
+	private void checkAndResetRoleDownloadSessionCookie(Response response) {
+		List<NewCookie> respCookieList = response.getCookies().values().stream().collect(Collectors.toList());;
 		for (NewCookie respCookie : respCookieList) {
 			if (respCookie.getName().equalsIgnoreCase(rangerAdminCookieName)) {
 				roleDownloadSessionId = respCookie;
@@ -1358,10 +1365,10 @@ public class RangerAdminRESTClient extends AbstractRangerAdminClient {
 		}
 	}
 
-	private void setCookieReceivedFromRoleDownloadSession(ClientResponse clientResponse) {
+	private void setCookieReceivedFromRoleDownloadSession(Response clientResponse) {
 		if (isRangerCookieEnabled) {
 			Cookie sessionCookie = null;
-			List<NewCookie> cookieList = clientResponse.getCookies();
+			List<NewCookie> cookieList = clientResponse.getCookies().values().stream().collect(Collectors.toList());;
 			// save cookie received from credentials session login
 			for (NewCookie cookie : cookieList) {
 				if (cookie.getName().equalsIgnoreCase(rangerAdminCookieName)) {
